@@ -1,4 +1,4 @@
-# Use the official PHP image with Apache and PHP 8.0 (compatible with XenForo 2.2)
+# Use the official PHP image with Apache and PHP 8.0
 FROM php:8.0-apache
 
 # Set working directory
@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd mbstring pdo pdo_mysql zip exif
+    && docker-php-ext-install -j$(nproc) gd mbstring pdo pdo_mysql zip exif mysqli
 
 # Enable Apache mod_rewrite for pretty URLs
 RUN a2enmod rewrite
