@@ -1,47 +1,25 @@
-# Base image: Ubuntu 24.04
-FROM ubuntu:24.04
+# Stage 1: PHP-FPM with necessary PHP extensions
+FROM php:8.3-fpm AS php-fpm
 
-# Set environment variables to avoid interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
+# Install necessary PHP extensions for XenForo
+RUN docker-php-ext-install mysqli gd mbstring xml json curl zip
 
-# Update and install necessary packages: Nginx, PHP-FPM, and required PHP extensions
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y nginx php8.3-fpm php-mysql \
-    php-gd php-mbstring php-xml php-json php-cli php-curl \
-    wget curl zip unzip nano sudo
+# Stage 2: Nginx
+FROM nginx:alpine AS nginx
 
-# Configure Nginx for XenForo
-RUN rm /etc/nginx/sites-enabled/default && \
-    echo 'server { \
-        listen 80; \
-        server_name yourdomain.com; \
-        root /var/www/xenforo; \
-        index index.php index.html index.htm; \
-        location / { \
-            try_files $uri $uri/ /index.php?$uri&$args; \
-        } \
-        location ~ \.php$ { \
-            include snippets/fastcgi-php.conf; \
-            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock; \
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
-            include fastcgi_params; \
-        } \
-    }' > /etc/nginx/sites-available/xenforo && \
-    ln -s /etc/nginx/sites-available/xenforo /etc/nginx/sites-enabled/
+# Copy Nginx configuration for XenForo
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
-# Start PHP-FPM and Nginx services during build (for testing purposes)
-RUN service php8.3-fpm start && \
-    service nginx start
+# Copy PHP-FPM configuration from the first stage
+COPY --from=php-fpm /usr/local/etc/php-fpm.d/ /usr/local/etc/php-fpm.d/
 
-# Create XenForo directory and set proper permissions
+# Create the directory for XenForo
 RUN mkdir -p /var/www/xenforo && \
-    chown -R www-data:www-data /var/www/xenforo && \
+    chown -R nginx:nginx /var/www/xenforo && \
     chmod -R 755 /var/www/xenforo
 
-# Expose port 80 for Nginx
+# Expose port 80
 EXPOSE 80
 
-# Command to start PHP-FPM and Nginx services when the container starts
-CMD service php8.3-fpm start && \
-    service nginx start && \
-    tail -f /dev/null
+# Start Nginx in the foreground
+CMD ["nginx", "-g", "daemon off;"]
