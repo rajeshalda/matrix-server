@@ -1,45 +1,32 @@
-# Use the official PHP image with Apache and PHP 8.0
-FROM php:8.0-apache
+# Use an official PHP-FPM image with required PHP extensions
+FROM php:8.3-fpm
 
-# Set working directory
-WORKDIR /var/www/html
-
-# Install necessary dependencies for XenForo
+# Install necessary extensions for XenForo
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libzip-dev \
-    zip \
-    unzip \
+    nginx \
     mariadb-client \
-    libonig-dev \
-    libxml2-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd mbstring pdo pdo_mysql zip exif mysqli
+    php-mysql \
+    php-gd \
+    php-mbstring \
+    php-xml \
+    php-json \
+    php-curl \
+    php-cli \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache mod_rewrite for pretty URLs
-RUN a2enmod rewrite
+# Configure Nginx
+RUN mkdir -p /etc/nginx
+COPY ./nginx.conf /etc/nginx/nginx.conf
 
-# Set Apache ServerName to avoid issues
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+# Create directory for XenForo
+RUN mkdir -p /var/www/xenforo && chown -R www-data:www-data /var/www/xenforo
 
-# Install Composer for dependency management (if needed in future)
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+# Set the working directory
+WORKDIR /var/www/xenforo
 
-# Copy current directory contents into the working directory in the container
-COPY . /var/www/html
-
-# Set permissions for Apache to work with XenForo directories
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html
-
-# Ensure that the data and internal_data directories are writable by XenForo
-RUN chown -R www-data:www-data /var/www/html/data /var/www/html/internal_data \
-    && chmod -R 0777 /var/www/html/data /var/www/html/internal_data
-
-# Expose port 80 to access Apache
+# Expose port 80 for Nginx
 EXPOSE 80
 
-# Start Apache in the foreground (to keep the container running)
-CMD ["apache2-foreground"]
+# Start both PHP-FPM and Nginx
+CMD service nginx start && php-fpm
