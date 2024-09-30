@@ -1,8 +1,18 @@
 # Stage 1: PHP-FPM with necessary PHP extensions
 FROM php:8.3-fpm AS php-fpm
 
-# Install necessary PHP extensions for XenForo
-RUN docker-php-ext-install mysqli gd mbstring xml json curl zip
+# Install necessary system dependencies and PHP extensions for XenForo
+RUN apt-get update && apt-get install -y \
+    libjpeg-dev \
+    libpng-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install mysqli gd mbstring xml json curl zip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Stage 2: Nginx
 FROM nginx:alpine AS nginx
