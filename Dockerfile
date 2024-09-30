@@ -10,12 +10,16 @@ RUN apt-get update && apt-get upgrade -y && \
     php-mysql php-gd php-mbstring php-xml php-json php-cli php-curl \
     wget curl zip unzip nano sudo
 
-# Start and configure MariaDB to create the database and user for XenForo
-RUN service mysql start && \
+# Set MariaDB configuration to allow database setup during build
+RUN service mysql stop && \
+    mysqld --initialize-insecure && \
+    mysqld_safe & \
+    sleep 10 && \
     mysql -e "CREATE DATABASE xenforo_db;" && \
     mysql -e "CREATE USER 'xenforo_user'@'localhost' IDENTIFIED BY '9631';" && \
     mysql -e "GRANT ALL PRIVILEGES ON xenforo_db.* TO 'xenforo_user'@'localhost';" && \
-    mysql -e "FLUSH PRIVILEGES;"
+    mysql -e "FLUSH PRIVILEGES;" && \
+    mysqladmin shutdown
 
 # Configure Nginx for XenForo
 RUN rm /etc/nginx/sites-enabled/default && \
@@ -36,7 +40,7 @@ RUN rm /etc/nginx/sites-enabled/default && \
     }' > /etc/nginx/sites-available/xenforo && \
     ln -s /etc/nginx/sites-available/xenforo /etc/nginx/sites-enabled/
 
-# Start services (MariaDB, PHP-FPM, and Nginx)
+# Start services (PHP-FPM and Nginx)
 RUN service php8.3-fpm start && \
     service nginx start
 
@@ -48,5 +52,8 @@ RUN mkdir -p /var/www/xenforo && \
 # Expose port 80 for Nginx
 EXPOSE 80
 
-# Command to start the services when the container starts
-CMD service mysql start && service php8.3-fpm start && service nginx start && tail -f /dev/null
+# Command to start MariaDB, PHP-FPM, and Nginx services when the container starts
+CMD mysqld_safe & \
+    service php8.3-fpm start && \
+    service nginx start && \
+    tail -f /dev/null
