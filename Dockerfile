@@ -1,36 +1,52 @@
-# Use the official PHP-FPM image
-FROM php:8.3-fpm
+# Base image: Ubuntu 24.04
+FROM ubuntu:24.04
 
-# Install necessary packages and PHP extensions
-RUN apt-get update && apt-get install -y \
-    nginx \
-    mariadb-client \
-    php-mysql \
-    php-gd \
-    php-mbstring \
-    php-xml \
-    php-json \
-    php-curl \
-    php-cli \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Set environment variables to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Copy Nginx configuration file to the container
-# Ensure that the nginx.conf file exists in the same directory as this Dockerfile
-COPY ./nginx.conf /etc/nginx/nginx.conf
+# Update and install necessary packages: Nginx, MariaDB, PHP
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y nginx mariadb-server php8.3-fpm \
+    php-mysql php-gd php-mbstring php-xml php-json php-cli php-curl \
+    wget curl zip unzip nano sudo
 
-# Create the XenForo web directory
-RUN mkdir -p /var/www/xenforo && chown -R www-data:www-data /var/www/xenforo
+# Start and configure MariaDB to create the database and user for XenForo
+RUN service mysql start && \
+    mysql -e "CREATE DATABASE xenforo_db;" && \
+    mysql -e "CREATE USER 'xenforo_user'@'localhost' IDENTIFIED BY '9631';" && \
+    mysql -e "GRANT ALL PRIVILEGES ON xenforo_db.* TO 'xenforo_user'@'localhost';" && \
+    mysql -e "FLUSH PRIVILEGES;"
 
-# Set the working directory to /var/www/xenforo
-WORKDIR /var/www/xenforo
+# Configure Nginx for XenForo
+RUN rm /etc/nginx/sites-enabled/default && \
+    echo 'server { \
+        listen 80; \
+        server_name yourdomain.com; \
+        root /var/www/xenforo; \
+        index index.php index.html index.htm; \
+        location / { \
+            try_files $uri $uri/ /index.php?$uri&$args; \
+        } \
+        location ~ \.php$ { \
+            include snippets/fastcgi-php.conf; \
+            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock; \
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name; \
+            include fastcgi_params; \
+        } \
+    }' > /etc/nginx/sites-available/xenforo && \
+    ln -s /etc/nginx/sites-available/xenforo /etc/nginx/sites-enabled/
 
-# Expose port 90 for Nginx
-EXPOSE 90
+# Start services (MariaDB, PHP-FPM, and Nginx)
+RUN service php8.3-fpm start && \
+    service nginx start
 
-# Copy the entrypoint script (optional if you want a custom script)
-# COPY ./entrypoint.sh /entrypoint.sh
-# RUN chmod +x /entrypoint.sh
+# Create XenForo directory and set proper permissions
+RUN mkdir -p /var/www/xenforo && \
+    chown -R www-data:www-data /var/www/xenforo && \
+    chmod -R 755 /var/www/xenforo
 
-# Start both Nginx and PHP-FPM using a shell script
-CMD ["sh", "-c", "service nginx start && php-fpm"]
+# Expose port 80 for Nginx
+EXPOSE 80
+
+# Command to start the services when the container starts
+CMD service mysql start && service php8.3-fpm start && service nginx start && tail -f /dev/null
